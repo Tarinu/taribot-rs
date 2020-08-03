@@ -11,3 +11,9 @@ dotenv = "0.15.0"
 env_logger = "0.6"
 log = "0.4"
 serenity = "0.8"
+rand = "0.7.3"
+
+[dependencies.image]
+version = "0.23.8"
+default-features = false
+features = ["jpeg"]
