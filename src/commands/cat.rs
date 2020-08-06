@@ -1,5 +1,4 @@
-use crate::CatConfig;
-use log::debug;
+use log::{debug, warn};
 use rand::{seq::IteratorRandom, thread_rng};
 use serenity::{
     framework::standard::{
@@ -10,7 +9,51 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::borrow::Cow;
+use std::{
+    borrow::Cow,
+    path::PathBuf,
+    env,
+};
+
+pub struct CatConfig {
+    max_images: u8,
+    image_path: PathBuf,
+}
+
+impl CatConfig {
+    pub fn new() -> Self {
+        let mut cat_count = 1;
+        match env::var("CAT_MAX_IMAGES") {
+            Ok(count) => {
+                cat_count = count.parse::<u8>().unwrap();
+            }
+            Err(_) => {
+                warn!("CAT_MAX_IMAGES env not found, defaulting to {}", cat_count);
+            }
+        }
+        debug!("Cat count set to: {}", cat_count);
+
+        let cat_path = env::var("CAT_IMAGE_PATH").expect("CAT_IMAGE_PATH has to be set in env");
+        debug!("Cat image path set to: {}", cat_path);
+        let path = PathBuf::from(&cat_path);
+
+        if !path.exists() {
+            panic!("Given path ({}) doesn't exist", cat_path);
+        }
+        if !path.is_dir() {
+            panic!("Given path ({}) is not directory", cat_path);
+        }
+
+        CatConfig {
+            max_images: cat_count,
+            image_path: path,
+        }
+    }
+}
+
+impl TypeMapKey for CatConfig {
+    type Value = CatConfig;
+}
 
 #[command]
 #[checks(CatCount)]
