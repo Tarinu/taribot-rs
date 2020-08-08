@@ -1,0 +1,21 @@
+version: '3.4'
+
+services:
+  taribot:
+    image: taribot-rs
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ${CAT_IMAGE_PATH}:/srv/taribot:ro
+    environment:
+      - DISCORD_TOKEN
+      - RUST_LOG
+      - PREFIX
+      - CAT_MAX_IMAGES
+      - CAT_IMAGE_PATH=/srv/taribot      
+      - CATVID_ALBUM_ID
+      - CATVID_CLIENT_ID
+      - CATVID_CLIENT_SECRET
+      - CATVID_USERNAME
+      - CATVID_PASSWORD
