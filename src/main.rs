@@ -3,7 +3,6 @@ mod commands;
 use dotenv::dotenv;
 use log::{error, info, warn};
 use serenity::{
-    client::bridge::gateway::ShardManager,
     framework::{
         standard::macros::group,
         standard::DispatchError::{CheckFailed, NotEnoughArguments, TooManyArguments},
@@ -16,10 +15,11 @@ use serenity::{
 use std::{collections::HashSet, env, sync::Arc};
 
 use commands::cat::*;
-struct ShardManagerContainer;
+use commands::catvid::*;
+struct CatvidConfigContainer;
 
-impl TypeMapKey for ShardManagerContainer {
-    type Value = Arc<Mutex<ShardManager>>;
+impl TypeMapKey for CatvidConfigContainer {
+    type Value = Arc<Mutex<CatvidConfig>>;
 }
 
 struct Handler;
@@ -35,7 +35,7 @@ impl EventHandler for Handler {
 }
 
 #[group]
-#[commands(cat)]
+#[commands(cat, catvid)]
 struct General;
 
 fn main() {
@@ -51,8 +51,8 @@ fn main() {
 
     {
         let mut data = client.data.write();
-        data.insert::<ShardManagerContainer>(Arc::clone(&client.shard_manager));
         data.insert::<CatConfig>(CatConfig::new());
+        data.insert::<CatvidConfigContainer>(Arc::new(Mutex::new(CatvidConfig::new())));
     }
 
     let owners = match client.cache_and_http.http.get_current_application_info() {

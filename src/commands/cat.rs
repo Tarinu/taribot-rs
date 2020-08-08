@@ -9,11 +9,7 @@ use serenity::{
     model::prelude::*,
     prelude::*,
 };
-use std::{
-    borrow::Cow,
-    path::PathBuf,
-    env,
-};
+use std::{borrow::Cow, env, path::PathBuf};
 
 pub struct CatConfig {
     max_images: u8,
