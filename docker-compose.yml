@@ -19,3 +19,4 @@ services:
       - CATVID_CLIENT_SECRET
       - CATVID_USERNAME
       - CATVID_PASSWORD
+    restart: unless-stopped
