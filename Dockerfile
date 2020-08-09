@@ -4,6 +4,6 @@ WORKDIR /app
 ADD . /app
 RUN cargo build --release
 
-FROM gcr.io/distroless/cc
+FROM debian:buster-slim
 COPY --from=build /app/target/release/taribot /
 CMD ["./taribot"]
