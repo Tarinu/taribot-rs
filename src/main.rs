@@ -40,11 +40,11 @@ impl EventHandler for Handler {
 struct General;
 
 fn main() {
-    env_logger::init();
-
     if dotenv().is_err() {
         warn!("Failed to load .env file");
     }
+
+    env_logger::init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
