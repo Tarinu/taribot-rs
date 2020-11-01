@@ -2,10 +2,7 @@ version: '3.4'
 
 services:
   taribot:
-    image: taribot-rs
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: tarinu/taribot-rs
     volumes:
       - ${CAT_IMAGE_PATH}:/srv/taribot:ro
     environment:

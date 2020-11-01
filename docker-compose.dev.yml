@@ -1,0 +1,9 @@
+version: '3.4'
+
+services:
+  taribot:
+    image: taribot-rs
+    build:
+      context: .
+      dockerfile: Dockerfile
+    restart: "no"
