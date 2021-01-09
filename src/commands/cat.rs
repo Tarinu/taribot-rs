@@ -1,15 +1,15 @@
-use log::{debug, warn};
 use rand::{seq::IteratorRandom, thread_rng};
 use serenity::{
     framework::standard::{
         macros::{check, command},
-        Args, CheckResult, CommandError, CommandResult,
+        Args, CommandResult, Reason,
     },
     http::AttachmentType,
     model::prelude::*,
     prelude::*,
 };
 use std::{borrow::Cow, env, path::PathBuf};
+use tracing::{debug, warn};
 
 pub struct CatConfig {
     max_images: u8,
@@ -55,18 +55,14 @@ impl TypeMapKey for CatConfig {
 #[checks(CatCount)]
 #[min_args(0)]
 #[max_args(1)]
-pub fn cat(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
+pub async fn cat(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult {
     let count = args.single::<u8>().unwrap_or(1);
     debug!("Requested {} images", count);
 
-    let data = ctx.data.read();
+    let data = ctx.data.read().await;
 
-    let image_path = match data.get::<CatConfig>() {
-        Some(config) => &config.image_path,
-        None => {
-            return Err(CommandError("Failed to get CatConfig".to_string()));
-        }
-    };
+    let config = data.get::<CatConfig>().ok_or("Failed to get Cat config")?;
+    let image_path = &config.image_path;
 
     let images = image_path
         .read_dir()?
@@ -118,38 +114,42 @@ pub fn cat(ctx: &mut Context, msg: &Message, mut args: Args) -> CommandResult {
     );
 
     msg.channel_id
-        .send_message(&ctx.http, |m| m.add_files(attachments))?;
+        .send_message(&ctx.http, |m| m.add_files(attachments))
+        .await?;
 
     Ok(())
 }
 
 #[check]
 #[name = "CatCount"]
-fn cat_count_check(ctx: &mut Context, _: &Message, args: &mut Args) -> CheckResult {
+async fn cat_count_check(ctx: &Context, _: &Message, args: &mut Args) -> Result<(), Reason> {
     // Cat command defaults to 1 if no arg is given so we don't need to check anything
     if args.is_empty() {
-        return true.into();
+        return Ok(());
     }
 
-    let data = ctx.data.read();
+    let data = ctx.data.read().await;
 
     match data.get::<CatConfig>() {
         Some(config) => match args.single::<u8>() {
             Ok(count) => {
                 if count < 1 {
-                    return CheckResult::new_user("Count has to be at least 1");
+                    return Err(Reason::User("Count has to be at least 1".to_owned()));
                 }
                 if count > config.max_images {
-                    return CheckResult::new_user(format!(
+                    return Err(Reason::User(format!(
                         "Count can be max {}",
                         config.max_images
-                    ));
+                    )));
                 }
             }
-            Err(_) => return CheckResult::new_user("Count has to be positive integer"),
+            Err(_) => return Err(Reason::User("Count has to be positive integer".to_owned())),
         },
         None => {
-            return CheckResult::new_user_and_log("Internal error", "Failed to get CatConfig");
+            return Err(Reason::UserAndLog {
+                user: "Internal error".to_owned(),
+                log: "Failed to get CatConfig".to_owned(),
+            });
         }
     };
 
@@ -157,5 +157,5 @@ fn cat_count_check(ctx: &mut Context, _: &Message, args: &mut Args) -> CheckResu
     // No need to reset it for failure states since it won't reach the command anyway
     args.restore();
 
-    true.into()
+    Ok(())
 }

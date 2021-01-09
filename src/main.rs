@@ -2,21 +2,29 @@ mod api;
 mod commands;
 
 use dotenv::dotenv;
-use log::{error, info, warn};
 use serenity::{
+    async_trait,
     framework::{
-        standard::macros::group,
         standard::DispatchError::{CheckFailed, NotEnoughArguments, TooManyArguments},
         standard::Reason,
+        standard::{
+            macros::{group, hook},
+            DispatchError,
+        },
         StandardFramework,
     },
-    model::{event::ResumedEvent, gateway::Ready},
+    http::Http,
+    model::{channel::Message, event::ResumedEvent, gateway::Ready},
     prelude::*,
 };
 use std::{collections::HashSet, env, sync::Arc};
 
 use commands::cat::*;
 use commands::catvid::*;
+
+use tracing::{error, info, warn};
+use tracing_subscriber::{EnvFilter, FmtSubscriber};
+
 struct CatvidConfigContainer;
 
 impl TypeMapKey for CatvidConfigContainer {
@@ -25,13 +33,62 @@ impl TypeMapKey for CatvidConfigContainer {
 
 struct Handler;
 
+#[async_trait]
 impl EventHandler for Handler {
-    fn ready(&self, _: Context, ready: Ready) {
+    async fn ready(&self, _: Context, ready: Ready) {
         info!("Connected as {}", ready.user.name);
     }
 
-    fn resume(&self, _: Context, _: ResumedEvent) {
+    async fn resume(&self, _: Context, _: ResumedEvent) {
         info!("Resumed");
+    }
+}
+
+#[hook]
+async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError) {
+    match error {
+        CheckFailed(_check_name, reason) => match reason {
+            Reason::User(message) => {
+                if let Err(e) = msg.channel_id.say(&ctx.http, message).await {
+                    error!("{}", e);
+                }
+            }
+            Reason::Log(message) => {
+                warn!("{}", message);
+            }
+            Reason::UserAndLog { user, log } => {
+                if let Err(e) = msg.channel_id.say(&ctx.http, user).await {
+                    error!("{}", e);
+                }
+                warn!("{}", log);
+            }
+            _ => (),
+        },
+        NotEnoughArguments { min, given } => {
+            if let Err(e) = msg
+                .channel_id
+                .say(
+                    &ctx.http,
+                    format!("Need {} arguments, but only got {}.", min, given),
+                )
+                .await
+            {
+                error!("{}", e);
+            }
+        }
+        TooManyArguments { max, given } => {
+            if let Err(e) = msg
+                .channel_id
+                .say(
+                    &ctx.http,
+                    format!("Max arguments allowed is {}, but got {}.", max, given),
+                )
+                .await
+            {
+                error!("{}", e);
+            }
+        }
+        _ => (),
     }
 }
 
@@ -39,82 +96,70 @@ impl EventHandler for Handler {
 #[commands(cat, catvid)]
 struct General;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     if dotenv().is_err() {
         warn!("Failed to load .env file");
     }
 
-    env_logger::init();
+    // Initialize the logger to use environment variables.
+    //
+    // In this case, a good default is setting the environment variable
+    // `RUST_LOG` to debug`.
+    let subscriber = FmtSubscriber::builder()
+        .with_env_filter(EnvFilter::from_default_env())
+        .finish();
+
+    tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    let mut client = Client::new(&token, Handler).expect("Err creating client");
+    let http = Http::new_with_token(&token);
+
+    // We will fetch your bot's owners and id
+    let (owners, _bot_id) = match http.get_current_application_info().await {
+        Ok(info) => {
+            let mut owners = HashSet::new();
+            owners.insert(info.owner.id);
+
+            (owners, info.id)
+        }
+        Err(why) => panic!("Could not access application info: {:?}", why),
+    };
+
+    let framework = StandardFramework::new()
+        .configure(|c| {
+            c.owners(owners).prefix(
+                env::var("PREFIX")
+                    .expect("Expected a prefix in the environment")
+                    .as_str(),
+            )
+        })
+        .group(&GENERAL_GROUP)
+        .on_dispatch_error(dispatch_error);
+
+    let mut client = Client::builder(&token)
+        .framework(framework)
+        .event_handler(Handler)
+        .await
+        .expect("Err creating client");
 
     {
-        let mut data = client.data.write();
+        let mut data = client.data.write().await;
         data.insert::<CatConfig>(CatConfig::new());
         data.insert::<CatvidConfigContainer>(Arc::new(Mutex::new(CatvidConfig::new())));
     }
 
-    let owners = match client.cache_and_http.http.get_current_application_info() {
-        Ok(info) => {
-            let mut set = HashSet::new();
-            set.insert(info.owner.id);
+    let shard_manager = client.shard_manager.clone();
 
-            set
-        }
-        Err(reason) => panic!("Couldn't get application info: {:?}", reason),
-    };
+    tokio::spawn(async move {
+        tokio::signal::ctrl_c()
+            .await
+            .expect("Could not register ctrl+c handler");
+        shard_manager.lock().await.shutdown_all().await;
+    });
 
-    client.with_framework(
-        StandardFramework::new()
-            .configure(|c| {
-                c.owners(owners).prefix(
-                    env::var("PREFIX")
-                        .expect("Expected a prefix in the environment")
-                        .as_str(),
-                )
-            })
-            .group(&GENERAL_GROUP)
-            .on_dispatch_error(|ctx, msg, error| match error {
-                CheckFailed(_check_name, reason) => match reason {
-                    Reason::User(message) => {
-                        if let Err(e) = msg.channel_id.say(&ctx.http, message) {
-                            error!("{}", e);
-                        }
-                    }
-                    Reason::Log(message) => {
-                        warn!("{}", message);
-                    }
-                    Reason::UserAndLog { user, log } => {
-                        if let Err(e) = msg.channel_id.say(&ctx.http, user) {
-                            error!("{}", e);
-                        }
-                        warn!("{}", log);
-                    }
-                    _ => (),
-                },
-                NotEnoughArguments { min, given } => {
-                    if let Err(e) = msg.channel_id.say(
-                        &ctx.http,
-                        format!("Need {} arguments, but only got {}.", min, given),
-                    ) {
-                        error!("{}", e);
-                    }
-                }
-                TooManyArguments { max, given } => {
-                    if let Err(e) = msg.channel_id.say(
-                        &ctx.http,
-                        format!("Max arguments allowed is {}, but got {}.", max, given),
-                    ) {
-                        error!("{}", e);
-                    }
-                }
-                _ => (),
-            }),
-    );
-
-    if let Err(reason) = client.start() {
-        error!("Client error: {:?}", reason);
+    if let Err(why) = client.start().await {
+        error!("Client error: {:?}", why);
     }
 }

@@ -8,12 +8,13 @@ edition = "2018"
 
 [dependencies]
 dotenv = "0.15.0"
-env_logger = "0.6"
-log = "0.4"
-serenity = "0.8"
-rand = "0.7.3"
+serenity = "0.10"
+rand = "0.8"
 serde = "1.0.114"
 serde_json = "1.0.57"
+tracing = "0.1"
+tracing-subscriber = "0.2"
+tracing-futures = "0.2"
 
 [dependencies.image]
 version = "0.23.8"
@@ -21,6 +22,10 @@ default-features = false
 features = ["jpeg"]
 
 [dependencies.reqwest]
-version = "0.10.7"
+version = "0.11"
 default-features = false
-features = ["rustls-tls", "blocking"]
+features = ["rustls-tls"]
+
+[dependencies.tokio]
+version = "1.0"
+features = ["macros", "signal", "rt-multi-thread"]

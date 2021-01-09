@@ -1,6 +1,5 @@
-use log::debug;
 use rand::{seq::SliceRandom, thread_rng};
-use reqwest::blocking::Client as ReqwestClient;
+use reqwest::Client as ReqwestClient;
 use serde::{
     ser::{Serialize, SerializeStruct, Serializer},
     Deserialize, Serialize as SerializeDerive,
@@ -8,10 +7,12 @@ use serde::{
 use std::error::Error;
 use std::fmt;
 use std::time::Instant;
+use tracing::debug;
 
 const TOKEN_URL: &str = "https://api.gfycat.com/v1/oauth/token";
 
 #[derive(SerializeDerive, PartialEq)]
+#[allow(dead_code)]
 pub enum GrantType {
     #[serde(rename = "password")]
     Password,
@@ -23,7 +24,7 @@ pub enum GrantType {
 
 #[derive(Deserialize, Debug)]
 #[allow(non_snake_case)]
-struct GfycatError {
+pub struct GfycatError {
     errorMessage: GfycatErrorMessage,
 }
 
@@ -33,10 +34,24 @@ struct GfycatErrorMessage {
     description: String,
 }
 
+impl fmt::Display for GfycatErrorMessage {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "Error {}: {}", self.code, self.description)
+    }
+}
+
 #[derive(Debug)]
-enum RequestError {
+pub enum RequestError {
     Gfycat(GfycatError),
     Reqwest(reqwest::Error),
+}
+
+impl Error for RequestError {}
+
+impl fmt::Display for RequestError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "{}", self)
+    }
 }
 
 impl From<reqwest::Error> for RequestError {
@@ -44,6 +59,19 @@ impl From<reqwest::Error> for RequestError {
         Self::Reqwest(error)
     }
 }
+
+/*impl From<RequestError> for CommandError {
+    fn from(error: RequestError) -> Self {
+        match error {
+            RequestError::Gfycat(error) => {
+                error.errorMessage
+            },
+            RequestError::Reqwest(error) => {
+                error.into()
+            }
+        }
+    }
+}*/
 
 pub struct TokenData {
     client_id: String,
@@ -119,6 +147,7 @@ impl ClientBuilder {
         }
     }
 
+    #[allow(dead_code)]
     pub fn client_credentials_grant(mut self) -> Self {
         self.username = None;
         self.password = None;
@@ -180,55 +209,61 @@ pub struct Client {
 }
 
 impl Client {
-    pub fn random_video(&mut self) -> String {
+    pub async fn random_video(&mut self) -> Result<String, RequestError> {
         // Cache is newer than last 24h
         if self.gfycats.is_some()
             && self.time_since_last_request.unwrap().elapsed().as_secs() < 60 * 60 * 24
         {
             let collection = self.gfycats.as_ref().unwrap();
             let gfycat = collection.pick_random().unwrap();
-            return format!("https://gfycat.com/{}", gfycat.gfyId);
+            return Ok(format!("https://gfycat.com/{}", gfycat.gfyId));
         }
 
         if self.token.is_none() {
-            self.token = Some(self.request_token().unwrap());
+            self.token = Some(self.request_token().await?);
         }
 
         let token = self.token.as_ref().unwrap();
         if !token.is_valid() {
-            self.token = Some(self.refresh_token().unwrap());
+            self.token = Some(self.refresh_token().await?);
         }
 
-        let response = self.request_album().unwrap();
+        let response = self.request_album().await?;
         self.time_since_last_request = Some(Instant::now());
         self.gfycats = Some(response.publishedGfys);
 
         let collection = self.gfycats.as_ref().unwrap();
         let gfycat = collection.pick_random().unwrap();
-        format!("https://gfycat.com/{}", gfycat.gfyId)
+
+        Ok(format!("https://gfycat.com/{}", gfycat.gfyId))
     }
 
-    fn request_token(&self) -> Result<Token, RequestError> {
+    async fn request_token(&self) -> Result<Token, RequestError> {
         debug!("Requesting new gfycat token");
-        let response = self.client.post(TOKEN_URL).json(&self.token_data).send()?;
+        let response = self
+            .client
+            .post(TOKEN_URL)
+            .json(&self.token_data)
+            .send()
+            .await?;
 
         if !response.status().is_success() {
-            return Err(RequestError::Gfycat(response.json::<GfycatError>()?));
+            return Err(RequestError::Gfycat(response.json::<GfycatError>().await?));
         }
-        let mut token: Token = response.json()?;
+        let mut token: Token = response.json().await?;
         token.time_since_request = Some(Instant::now());
 
         Ok(token)
     }
 
-    fn refresh_token(&self) -> Result<Token, RequestError> {
+    async fn refresh_token(&self) -> Result<Token, RequestError> {
         debug!("Refreshing gfycat token");
         if self.token.is_none() {
-            return self.request_token();
+            return self.request_token().await;
         }
 
         if !self.token.as_ref().unwrap().is_refresh_valid() {
-            return self.request_token();
+            return self.request_token().await;
         }
 
         let data = RefreshTokenData {
@@ -238,19 +273,19 @@ impl Client {
             grant_type: GrantType::Refresh,
         };
 
-        let response = self.client.post(TOKEN_URL).json(&data).send()?;
+        let response = self.client.post(TOKEN_URL).json(&data).send().await?;
 
         if !response.status().is_success() {
-            return Err(RequestError::Gfycat(response.json::<GfycatError>()?));
+            return Err(RequestError::Gfycat(response.json::<GfycatError>().await?));
         }
 
-        let mut token: Token = response.json()?;
+        let mut token: Token = response.json().await?;
         token.time_since_request = Some(Instant::now());
 
         Ok(token)
     }
 
-    fn request_album(&self) -> Result<AlbumResponse, reqwest::Error> {
+    async fn request_album(&self) -> Result<AlbumResponse, reqwest::Error> {
         Ok(self
             .client
             .get(&format!(
@@ -261,8 +296,10 @@ impl Client {
                 "Authorization",
                 format!("Bearer {}", self.token.as_ref().unwrap().access_token),
             )
-            .send()?
-            .json::<AlbumResponse>()?)
+            .send()
+            .await?
+            .json::<AlbumResponse>()
+            .await?)
     }
 }
 

@@ -1,6 +1,6 @@
 ARG ARCH=amd64
 
-FROM rust:1.45-slim as base
+FROM rust:1.49-slim as base
 
 WORKDIR /app
 ADD . /app

@@ -1,12 +1,12 @@
-use crate::api::gfycat::{Client, ClientBuilder};
+use crate::api::gfycat::{Client, ClientBuilder, RequestError};
 use crate::CatvidConfigContainer;
 
-use log::debug;
 use serenity::{
-    framework::standard::{macros::command, CommandError, CommandResult},
+    framework::standard::{macros::command, CommandResult},
     model::prelude::*,
     prelude::*,
 };
+use tracing::debug;
 
 use std::env;
 
@@ -31,24 +31,24 @@ impl CatvidConfig {
         CatvidConfig { client: client }
     }
 
-    fn random_video(&mut self) -> String {
-        self.client.random_video()
+    async fn random_video(&mut self) -> Result<String, RequestError> {
+        self.client.random_video().await
     }
 }
 
 #[command]
-pub fn catvid(ctx: &mut Context, msg: &Message) -> CommandResult {
-    let data = ctx.data.read();
+pub async fn catvid(ctx: &Context, msg: &Message) -> CommandResult {
+    let data = ctx.data.read().await;
 
     let container = data
         .get::<CatvidConfigContainer>()
-        .ok_or(CommandError("Failed to get CatvidConfig".to_string()))?;
-    let mut config = container.lock();
+        .ok_or("Failed to get CatvidConfig".to_string())?;
+    let mut config = container.lock().await;
 
-    let video = config.random_video();
+    let video = config.random_video().await?;
     debug!("Sending {}", video);
 
-    msg.channel_id.say(&ctx.http, video)?;
+    msg.channel_id.say(&ctx.http, video).await?;
 
     Ok(())
 }
