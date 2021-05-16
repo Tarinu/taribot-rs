@@ -189,7 +189,7 @@ impl ClientBuilder {
 
         Ok(Client {
             token: None,
-            token_data: token_data,
+            token_data,
             client: ReqwestClient::new(),
             album_id: self.album_id,
             gfycats: None,

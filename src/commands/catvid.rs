@@ -28,7 +28,7 @@ impl CatvidConfig {
         .build()
         .unwrap();
 
-        CatvidConfig { client: client }
+        CatvidConfig { client }
     }
 
     async fn random_video(&mut self) -> Result<String, RequestError> {
@@ -42,7 +42,7 @@ pub async fn catvid(ctx: &Context, msg: &Message) -> CommandResult {
 
     let container = data
         .get::<CatvidConfigContainer>()
-        .ok_or("Failed to get CatvidConfig".to_string())?;
+        .ok_or_else(|| "Failed to get CatvidConfig".to_string())?;
     let mut config = container.lock().await;
 
     let video = config.random_video().await?;

@@ -67,10 +67,10 @@ pub async fn cat(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let images = image_path
         .read_dir()?
         .filter(|file| match file.as_ref().unwrap().path().extension() {
-            Some(ext) => match ext.to_str().unwrap().to_lowercase().as_str() {
-                "jpg" | "jpeg" => true,
-                _ => false,
-            },
+            Some(ext) => matches!(
+                ext.to_str().unwrap().to_lowercase().as_str(),
+                "jpg" | "jpeg"
+            ),
             None => false,
         })
         .choose_multiple(&mut thread_rng(), count.into())
