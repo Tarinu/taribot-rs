@@ -6,15 +6,16 @@ use serenity::{
     async_trait,
     framework::{
         standard::DispatchError::{CheckFailed, NotEnoughArguments, TooManyArguments},
-        standard::Reason,
         standard::{
-            macros::{group, hook},
-            DispatchError,
+            help_commands,
+            macros::{group, help, hook},
+            CommandResult, DispatchError,
         },
+        standard::{Args, CommandGroup, HelpOptions, Reason},
         StandardFramework,
     },
     http::Http,
-    model::{channel::Message, event::ResumedEvent, gateway::Ready},
+    model::{channel::Message, event::ResumedEvent, gateway::Ready, id::UserId},
     prelude::*,
 };
 use std::{collections::HashSet, env, sync::Arc};
@@ -92,6 +93,20 @@ async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError) {
     }
 }
 
+#[help]
+#[max_levenshtein_distance(3)]
+async fn help(
+    context: &Context,
+    msg: &Message,
+    args: Args,
+    help_options: &'static HelpOptions,
+    groups: &[&'static CommandGroup],
+    owners: HashSet<UserId>,
+) -> CommandResult {
+    help_commands::with_embeds(context, msg, args, help_options, groups, owners).await;
+    Ok(())
+}
+
 #[group]
 #[commands(cat, catvid)]
 struct General;
@@ -135,6 +150,7 @@ async fn main() {
                     .as_str(),
             )
         })
+        .help(&HELP)
         .group(&GENERAL_GROUP)
         .on_dispatch_error(dispatch_error);
 
