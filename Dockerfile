@@ -1,6 +1,4 @@
-# syntax = docker/dockerfile:experimental
-
-FROM rust:1.51-slim as build
+FROM rust:1.58-slim as build
 
 WORKDIR /app
 ADD . /app
