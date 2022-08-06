@@ -23,7 +23,7 @@ pub enum GrantType {
 }
 
 #[derive(Deserialize, Debug)]
-#[allow(non_snake_case)]
+#[allow(non_snake_case, dead_code)]
 pub struct GfycatError {
     errorMessage: GfycatErrorMessage,
 }
@@ -50,7 +50,11 @@ impl Error for RequestError {}
 
 impl fmt::Display for RequestError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
-        write!(f, "{}", self)
+        let error = match self {
+            RequestError::Gfycat(error) => error.errorMessage.to_string(),
+            RequestError::Reqwest(error) => error.to_string(),
+        };
+        write!(f, "{}", error)
     }
 }
 
@@ -286,8 +290,7 @@ impl Client {
     }
 
     async fn request_album(&self) -> Result<AlbumResponse, reqwest::Error> {
-        Ok(self
-            .client
+        self.client
             .get(&format!(
                 "https://api.gfycat.com/v1/me/albums/{}",
                 self.album_id
@@ -299,7 +302,7 @@ impl Client {
             .send()
             .await?
             .json::<AlbumResponse>()
-            .await?)
+            .await
     }
 }
 

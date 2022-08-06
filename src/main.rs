@@ -24,7 +24,6 @@ use commands::cat::*;
 use commands::catvid::*;
 
 use tracing::{error, info, warn};
-use tracing_subscriber::{EnvFilter, FmtSubscriber};
 
 struct CatvidConfigContainer;
 
@@ -103,7 +102,7 @@ async fn help(
     groups: &[&'static CommandGroup],
     owners: HashSet<UserId>,
 ) -> CommandResult {
-    help_commands::with_embeds(context, msg, args, help_options, groups, owners).await;
+    help_commands::with_embeds(context, msg, args, help_options, groups, owners).await?;
     Ok(())
 }
 
