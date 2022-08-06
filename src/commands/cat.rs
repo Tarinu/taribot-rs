@@ -4,11 +4,10 @@ use serenity::{
         macros::{check, command},
         Args, CommandResult, Reason,
     },
-    http::AttachmentType,
     model::prelude::*,
     prelude::*,
 };
-use std::{borrow::Cow, env, path::PathBuf};
+use std::{borrow::Cow, env, io::Cursor, path::PathBuf};
 use tracing::{debug, warn};
 
 pub struct CatConfig {
@@ -83,7 +82,7 @@ pub async fn cat(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
     let attachments = images
         .iter()
         .map(|image| {
-            let mut buffer = Vec::new();
+            let mut buffer = Cursor::new(Vec::new());
             image::open(image)
                 .unwrap()
                 .thumbnail(1920, 1920)
@@ -91,7 +90,7 @@ pub async fn cat(ctx: &Context, msg: &Message, mut args: Args) -> CommandResult 
                 .unwrap();
 
             AttachmentType::Bytes {
-                data: Cow::from(buffer),
+                data: Cow::from(buffer.into_inner()),
                 filename: image.file_name().unwrap().to_str().unwrap().to_string(),
             }
         })

@@ -46,7 +46,7 @@ impl EventHandler for Handler {
 }
 
 #[hook]
-async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError) {
+async fn dispatch_error(ctx: &Context, msg: &Message, error: DispatchError, _command_name: &str) {
     match error {
         CheckFailed(_check_name, reason) => match reason {
             Reason::User(message) => {
@@ -121,15 +121,11 @@ async fn main() {
     //
     // In this case, a good default is setting the environment variable
     // `RUST_LOG` to debug`.
-    let subscriber = FmtSubscriber::builder()
-        .with_env_filter(EnvFilter::from_default_env())
-        .finish();
-
-    tracing::subscriber::set_global_default(subscriber).expect("Failed to start the logger");
+    tracing_subscriber::fmt::init();
 
     let token = env::var("DISCORD_TOKEN").expect("Expected a token in the environment");
 
-    let http = Http::new_with_token(&token);
+    let http = Http::new(&token);
 
     // We will fetch your bot's owners and id
     let (owners, _bot_id) = match http.get_current_application_info().await {
@@ -154,7 +150,11 @@ async fn main() {
         .group(&GENERAL_GROUP)
         .on_dispatch_error(dispatch_error);
 
-    let mut client = Client::builder(&token)
+    let intents = GatewayIntents::GUILD_MESSAGES
+        | GatewayIntents::DIRECT_MESSAGES
+        | GatewayIntents::MESSAGE_CONTENT;
+
+    let mut client = Client::builder(&token, intents)
         .framework(framework)
         .event_handler(Handler)
         .await
