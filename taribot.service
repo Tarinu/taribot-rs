@@ -1,0 +1,16 @@
+[Unit]
+Description=Discord bot - taribot
+Documentation=https://github.com/Tarinu/taribot-rs
+After=network.target
+StartLimitIntervalSec=0
+
+[Service]
+Type=simple
+User=taribot
+WorkingDirectory=/home/taribot
+ExecStart=/home/taribot/taribot
+Restart=always
+RestartSec=60
+
+[Install]
+WantedBy=multi-user.target
